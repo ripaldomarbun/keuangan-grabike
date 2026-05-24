@@ -1,51 +1,32 @@
 /**
- * @typedef {Object} Transaction
- * @property {number} id - Unique identifier (timestamp-based)
- * @property {'pemasukan'|'pengeluaran'} type - Transaction type
- * @property {string} category - Category key (narik, bensin, kredit, etc.)
- * @property {number} amount - Transaction amount in IDR
- * @property {string} date - ISO date string (YYYY-MM-DD)
- * @property {string} note - Optional note
+ * @fileoverview State management dengan Firestore sebagai backend.
+ * Data tersimpan di cloud dan otomatis sync antar perangkat.
+ * Menggunakan cache lokal agar read synchronous, write asynchronous.
+ *
+ * Collections:
+ *   transactions/{docId}  → { type, category, amount, date, note, createdAt }
+ *   settings/app          → { driverName, dailyTarget, updatedAt }
+ *
+ * @author Driver Grabike Batam
+ * @version 3.0.0-firestore
  */
 
-/**
- * @typedef {Object} DailySummary
- * @property {number} totalIncome - Total income for filtered period
- * @property {number} totalExpense - Total expense for filtered period
- * @property {number} netProfit - Income minus expense (take home pay)
- * @property {number} capitalBensin - Total bensin expense
- * @property {number} capitalKredit - Total kredit top-up
- * @property {number} operationalCost - Other operational costs (food, service, etc.)
- * @property {number} todayIncome - Today's total income
- * @property {number} targetProgress - Progress toward target (0-100, capped)
- * @property {number} rawTargetProgress - Un-capped progress percentage
- * @property {number} dailyTarget - Configured daily target in IDR
- */
-
-/**
- * @typedef {Object} AppSettings
- * @property {number} dailyTarget - Target pendapatan bersih harian (default: 150000)
- * @property {string} driverName - Nama pengemudi untuk tampilan header
- */
-
-/**
- * @typedef {Object} CategoryConfig
- * @property {string} label - Nama kategori yang ditampilkan di UI
- * @property {string} icon - Nama ikon Lucide untuk rendering SVG
- * @property {string} color - Warna hex untuk aksen kategori
- */
-
-const STORAGE_KEYS = {
-    TRANSACTIONS: 'grabike_keuangan_transactions_simple',
-    SETTINGS: 'grabike_keuangan_settings_simple'
+/** Konfigurasi Firebase — dari project my01-935dd */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBCwkwIeC7Q4BYLbThA043WwPUJVbxOUzU",
+  authDomain: "my01-935dd.firebaseapp.com",
+  projectId: "my01-935dd",
+  storageBucket: "my01-935dd.firebasestorage.app",
+  messagingSenderId: "125776491155",
+  appId: "1:125776491155:web:a0189067da1d7c8d82d366",
+  measurementId: "G-2PG28NL0R6"
 };
 
 const DEFAULT_SETTINGS = {
-    dailyTarget: 150000, // Target pendapatan bersih harian Rp 150.000
+    dailyTarget: 150000,
     driverName: 'Driver Grabike Batam'
 };
 
-// Kategori yang disederhanakan sesuai permintaan driver
 const CATEGORIES = {
     pemasukan: {
         narik: { label: 'Pendapatan Bersih Grab', icon: 'motorcycle', color: '#00B14F' }
@@ -60,119 +41,203 @@ const CATEGORIES = {
 };
 
 /**
- * Manajemen state pusat dengan persistensi localStorage.
- * Menangani seluruh siklus data: create, read, delete, kalkulasi ringkasan,
- * export/import, dan inisialisasi data mock untuk pengguna baru.
+ * @typedef {Object} Transaction
+ * @property {string} id - Firestore document ID
+ * @property {'pemasukan'|'pengeluaran'} type
+ * @property {string} category
+ * @property {number} amount
+ * @property {string} date - YYYY-MM-DD
+ * @property {string} note
+ */
+
+/**
+ * @typedef {Object} DailySummary
+ * @property {number} totalIncome
+ * @property {number} totalExpense
+ * @property {number} netProfit
+ * @property {number} capitalBensin
+ * @property {number} capitalKredit
+ * @property {number} operationalCost
+ * @property {number} todayIncome
+ * @property {number} targetProgress
+ * @property {number} rawTargetProgress
+ * @property {number} dailyTarget
+ */
+
+/**
+ * @typedef {Object} AppSettings
+ * @property {number} dailyTarget
+ * @property {string} driverName
+ */
+
+/**
+ * Manajemen state dengan Firestore. Data di-cache lokal untuk akses
+ * synchronous. Real-time listener (onSnapshot) memperbarui cache
+ * saat ada perubahan dari perangkat lain.
  */
 class KeuanganStore {
     constructor() {
-        const storedTxs = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
-        if (storedTxs === null) {
-            this.transactions = this.generateMockTransactions();
-            this.saveToStorage(STORAGE_KEYS.TRANSACTIONS, this.transactions);
-        } else {
-            this.transactions = JSON.parse(storedTxs);
-        }
-        
-        this.settings = this.loadFromStorage(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS);
-        this.settings = { ...DEFAULT_SETTINGS, ...this.settings };
-    }
+        /** @type {Transaction[]} */
+        this.transactions = [];
+        /** @type {AppSettings} */
+        this.settings = { ...DEFAULT_SETTINGS };
+        this._allTxs = [];
+        this._ready = false;
+        this._seeded = false;
+        this._onUpdate = null;
 
-    loadFromStorage(key, defaultValue) {
-        try {
-            const data = localStorage.getItem(key);
-            return data ? JSON.parse(data) : defaultValue;
-        } catch (e) {
-            console.error('Gagal memuat data:', e);
-            return defaultValue;
-        }
-    }
+        firebase.initializeApp(FIREBASE_CONFIG);
+        this.db = firebase.firestore();
 
-    saveToStorage(key, data) {
-        try {
-            localStorage.setItem(key, JSON.stringify(data));
-        } catch (e) {
-            console.error('Gagal menyimpan data:', e);
-        }
+        this._initSettings();
+        this._initTransactions();
     }
-
-    // ──────────────────────────────────────────────
-    //  TRANSACTIONS
-    // ──────────────────────────────────────────────
 
     /**
-     * Mengembalikan salinan seluruh transaksi, terurut berdasarkan
-     * tanggal (terbaru duluan) dan ID (terbaru duluan).
-     * @returns {Transaction[]} Salinan array transaksi
+     * Mendaftarkan callback yang dipanggil setiap kali data berubah.
+     * @param {Function} fn
      */
-    getTransactions() {
-        return [...this.transactions].sort((a, b) => {
-            const dateDiff = new Date(b.date) - new Date(a.date);
-            if (dateDiff !== 0) return dateDiff;
-            return b.id - a.id;
+    onUpdate(fn) {
+        this._onUpdate = fn;
+    }
+
+    _notify() {
+        this._ready = true;
+        if (this._onUpdate) this._onUpdate();
+    }
+
+    // ──────────────────────────────────────────────
+    //  SETTINGS — load sekali, update via setDoc
+    // ──────────────────────────────────────────────
+
+    _initSettings() {
+        this.db.doc('settings/app').get().then(doc => {
+            if (doc.exists) {
+                this.settings = { ...DEFAULT_SETTINGS, ...doc.data() };
+            } else {
+                this.db.doc('settings/app').set(DEFAULT_SETTINGS);
+            }
+            this._notify();
         });
     }
 
-    /**
-     * Menambahkan transaksi baru ke dalam store dan menyimpannya.
-     * @param {Omit<Transaction, 'id'>} tx - Data transaksi tanpa ID
-     * @returns {Transaction} Transaksi yang baru dibuat (dengan ID)
-     */
-    addTransaction(tx) {
-        const newTx = {
-            id: tx.id || Date.now(),
-            type: tx.type, // 'pemasukan' | 'pengeluaran'
-            category: tx.category, // 'narik' | 'bensin' | 'kredit' | 'konsumsi' | 'servis' | 'lainnya'
-            amount: Number(tx.amount),
-            date: tx.date || new Date().toISOString().split('T')[0],
-            note: tx.note || ''
+    // ──────────────────────────────────────────────
+    //  TRANSACTIONS — real-time listener
+    // ──────────────────────────────────────────────
+
+    _initTransactions() {
+        this.db.collection('transactions')
+            .orderBy('date', 'desc')
+            .orderBy('createdAt', 'desc')
+            .onSnapshot(snapshot => {
+                if (snapshot.empty && !this._seeded) {
+                    this._seeded = true;
+                    this._seedMockData();
+                    return;
+                }
+
+                this._allTxs = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                this.transactions = [...this._allTxs];
+                this._notify();
+            });
+    }
+
+    _seedMockData() {
+        const today = new Date();
+        const getDate = (daysAgo) => {
+            const d = new Date();
+            d.setDate(today.getDate() - daysAgo);
+            return d.toISOString().split('T')[0];
         };
 
-        this.transactions.push(newTx);
-        this.saveToStorage(STORAGE_KEYS.TRANSACTIONS, this.transactions);
-        return newTx;
-    }
+        const txs = [
+            { type: 'pemasukan', category: 'narik', amount: 200000, date: getDate(0), note: 'Narik bersih seharian' },
+            { type: 'pengeluaran', category: 'bensin', amount: 30000, date: getDate(0), note: 'Modal Pertalite sebelum on-bit' },
+            { type: 'pengeluaran', category: 'kredit', amount: 30000, date: getDate(0), note: 'Top-up Dompet Kredit di Alfamart' },
+            { type: 'pengeluaran', category: 'konsumsi', amount: 25000, date: getDate(0), note: 'Makan nasi Padang + rokok + kopi' },
+            { type: 'pemasukan', category: 'narik', amount: 180000, date: getDate(1), note: 'Narik santai weekend' },
+            { type: 'pengeluaran', category: 'bensin', amount: 25000, date: getDate(1), note: 'Bensin' },
+            { type: 'pengeluaran', category: 'konsumsi', amount: 15000, date: getDate(1), note: 'Makan siang & es teh' },
+            { type: 'pemasukan', category: 'narik', amount: 220000, date: getDate(2), note: 'Orderan ramai' },
+            { type: 'pengeluaran', category: 'bensin', amount: 30000, date: getDate(2), note: 'Modal bensin' },
+            { type: 'pengeluaran', category: 'servis', amount: 75000, date: getDate(2), note: 'Ganti oli mesin & oli gardan' },
+            { type: 'pemasukan', category: 'narik', amount: 150000, date: getDate(3), note: 'Narik sampai sore' },
+            { type: 'pengeluaran', category: 'bensin', amount: 20000, date: getDate(3), note: 'Pertalite' },
+            { type: 'pengeluaran', category: 'konsumsi', amount: 20000, date: getDate(3), note: 'Makan soto banjar' },
+            { type: 'pemasukan', category: 'narik', amount: 190000, date: getDate(4), note: 'Narik lancar' },
+            { type: 'pengeluaran', category: 'bensin', amount: 30000, date: getDate(4), note: 'Bensin harian' },
+            { type: 'pemasukan', category: 'narik', amount: 160000, date: getDate(5), note: 'Hari biasa' },
+            { type: 'pengeluaran', category: 'bensin', amount: 20000, date: getDate(5), note: 'Bensin' },
+            { type: 'pengeluaran', category: 'lainnya', amount: 5000, date: getDate(5), note: 'Bayar parkir' },
+        ];
 
-    /**
-     * Menghapus satu transaksi berdasarkan ID.
-     * @param {number} id - ID transaksi yang akan dihapus
-     */
-    deleteTransaction(id) {
-        this.transactions = this.transactions.filter(tx => tx.id !== Number(id));
-        this.saveToStorage(STORAGE_KEYS.TRANSACTIONS, this.transactions);
-    }
-
-    /**
-     * Menghapus seluruh data transaksi dan mengatur ulang pengaturan
-     * ke nilai default. Operasi ireversibel — konfirmasi pengguna wajib.
-     */
-    clearAllData() {
-        this.transactions = [];
-        this.settings = { ...DEFAULT_SETTINGS };
-        this.saveToStorage(STORAGE_KEYS.TRANSACTIONS, this.transactions);
-        this.saveToStorage(STORAGE_KEYS.SETTINGS, this.settings);
+        const batch = this.db.batch();
+        txs.forEach(tx => {
+            const ref = this.db.collection('transactions').doc();
+            batch.set(ref, { ...tx, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+        });
+        batch.commit();
     }
 
     // ──────────────────────────────────────────────
-    //  SETTINGS
+    //  READ — synchronous dari cache
     // ──────────────────────────────────────────────
 
     /**
-     * Mengembalikan objek pengaturan saat ini (driver name, daily target).
+     * @returns {Transaction[]}
+     */
+    getTransactions() {
+        return [...this.transactions];
+    }
+
+    /**
      * @returns {AppSettings}
      */
     getSettings() {
         return this.settings;
     }
 
+    // ──────────────────────────────────────────────
+    //  WRITE — async ke Firestore
+    // ──────────────────────────────────────────────
+
     /**
-     * Memperbarui satu atau lebih properti pengaturan.
-     * Menggabungkan (merge) dengan pengaturan yang sudah ada.
-     * @param {Partial<AppSettings>} newSettings - Properti yang akan diperbarui
+     * @param {Omit<Transaction, 'id'>} tx
      */
-    updateSettings(newSettings) {
-        this.settings = { ...this.settings, ...newSettings };
-        this.saveToStorage(STORAGE_KEYS.SETTINGS, this.settings);
+    async addTransaction(tx) {
+        await this.db.collection('transactions').add({
+            type: tx.type,
+            category: tx.category,
+            amount: Number(tx.amount),
+            date: tx.date || new Date().toISOString().split('T')[0],
+            note: tx.note || '',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+    }
+
+    /**
+     * @param {string} id
+     */
+    async deleteTransaction(id) {
+        await this.db.collection('transactions').doc(id).delete();
+    }
+
+    /**
+     * @param {Partial<AppSettings>} s
+     */
+    async updateSettings(s) {
+        await this.db.doc('settings/app').set(s, { merge: true });
+    }
+
+    async clearAllData() {
+        const batch = this.db.batch();
+        const snapshot = await this.db.collection('transactions').get();
+        snapshot.docs.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+        await this.db.doc('settings/app').set(DEFAULT_SETTINGS);
     }
 
     // ──────────────────────────────────────────────
@@ -180,25 +245,23 @@ class KeuanganStore {
     // ──────────────────────────────────────────────
 
     /**
-     * Menghitung ringkasan keuangan berdasarkan filter periode.
-     *
-     * @param {'all'|'today'|'week'|'month'} dateFilter - Periode filter
-     * @returns {DailySummary} Ringkasan pendapatan, pengeluaran, modal, progress target
+     * @param {'all'|'today'|'week'|'month'} dateFilter
+     * @returns {DailySummary}
      */
     getSummary(dateFilter = 'all') {
         const todayStr = new Date().toISOString().split('T')[0];
         const now = new Date();
-        
-        let filteredTxs = this.transactions;
+
+        let filteredTxs = this._allTxs;
         if (dateFilter === 'today') {
-            filteredTxs = this.transactions.filter(tx => tx.date === todayStr);
+            filteredTxs = this._allTxs.filter(tx => tx.date === todayStr);
         } else if (dateFilter === 'week') {
             const oneWeekAgo = new Date();
             oneWeekAgo.setDate(now.getDate() - 7);
-            filteredTxs = this.transactions.filter(tx => new Date(tx.date) >= oneWeekAgo);
+            filteredTxs = this._allTxs.filter(tx => new Date(tx.date) >= oneWeekAgo);
         } else if (dateFilter === 'month') {
             const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-            filteredTxs = this.transactions.filter(tx => new Date(tx.date) >= startOfMonth);
+            filteredTxs = this._allTxs.filter(tx => new Date(tx.date) >= startOfMonth);
         }
 
         let totalIncome = 0;
@@ -219,17 +282,16 @@ class KeuanganStore {
             }
         });
 
-        // Hitung pendapatan bersih narik hari ini
-        const todayIncome = this.transactions
+        const todayIncome = this._allTxs
             .filter(tx => tx.date === todayStr && tx.type === 'pemasukan')
             .reduce((sum, tx) => sum + Number(tx.amount), 0);
 
         const targetProgress = (todayIncome / this.settings.dailyTarget) * 100;
 
         return {
-            totalIncome, // Total Pendapatan Bersih Grab
-            totalExpense, // Total Modal & Pengeluaran
-            netProfit: totalIncome - totalExpense, // Uang Bersih Dibawa Pulang (Take Home Pay)
+            totalIncome,
+            totalExpense,
+            netProfit: totalIncome - totalExpense,
             capitalBensin,
             capitalKredit,
             operationalCost,
@@ -240,216 +302,53 @@ class KeuanganStore {
         };
     }
 
-    // --- MOCK DATA ---
-    generateMockTransactions() {
-        const mockTxs = [];
-        const today = new Date();
-        
-        const getOffsetDate = (daysAgo) => {
-            const d = new Date();
-            d.setDate(today.getDate() - daysAgo);
-            return d.toISOString().split('T')[0];
-        };
-
-        // HARI INI
-        mockTxs.push({
-            id: Date.now() - 1000,
-            type: 'pemasukan',
-            category: 'narik',
-            amount: 200000,
-            date: getOffsetDate(0),
-            note: 'Narik bersih seharian'
-        });
-        mockTxs.push({
-            id: Date.now() - 2000,
-            type: 'pengeluaran',
-            category: 'bensin',
-            amount: 30000,
-            date: getOffsetDate(0),
-            note: 'Modal Pertalite sebelum on-bit'
-        });
-        mockTxs.push({
-            id: Date.now() - 3000,
-            type: 'pengeluaran',
-            category: 'kredit',
-            amount: 30000,
-            date: getOffsetDate(0),
-            note: 'Top-up Dompet Kredit di Alfamart'
-        });
-        mockTxs.push({
-            id: Date.now() - 4000,
-            type: 'pengeluaran',
-            category: 'konsumsi',
-            amount: 25000,
-            date: getOffsetDate(0),
-            note: 'Makan nasi Padang + rokok + kopi'
-        });
-
-        // KEMARIN
-        mockTxs.push({
-            id: Date.now() - 10000,
-            type: 'pemasukan',
-            category: 'narik',
-            amount: 180000,
-            date: getOffsetDate(1),
-            note: 'Narik santai weekend'
-        });
-        mockTxs.push({
-            id: Date.now() - 11000,
-            type: 'pengeluaran',
-            category: 'bensin',
-            amount: 25000,
-            date: getOffsetDate(1),
-            note: 'Bensin'
-        });
-        mockTxs.push({
-            id: Date.now() - 12000,
-            type: 'pengeluaran',
-            category: 'konsumsi',
-            amount: 15000,
-            date: getOffsetDate(1),
-            note: 'Makan siang & es teh'
-        });
-
-        // 2 HARI LALU
-        mockTxs.push({
-            id: Date.now() - 20000,
-            type: 'pemasukan',
-            category: 'narik',
-            amount: 220000,
-            date: getOffsetDate(2),
-            note: 'Orderan ramai'
-        });
-        mockTxs.push({
-            id: Date.now() - 21000,
-            type: 'pengeluaran',
-            category: 'bensin',
-            amount: 30000,
-            date: getOffsetDate(2),
-            note: 'Modal bensin'
-        });
-        mockTxs.push({
-            id: Date.now() - 22000,
-            type: 'pengeluaran',
-            category: 'servis',
-            amount: 75000,
-            date: getOffsetDate(2),
-            note: 'Ganti oli mesin & oli gardan'
-        });
-
-        // 3 HARI LALU
-        mockTxs.push({
-            id: Date.now() - 30000,
-            type: 'pemasukan',
-            category: 'narik',
-            amount: 150000,
-            date: getOffsetDate(3),
-            note: 'Narik sampai sore'
-        });
-        mockTxs.push({
-            id: Date.now() - 31000,
-            type: 'pengeluaran',
-            category: 'bensin',
-            amount: 20000,
-            date: getOffsetDate(3),
-            note: 'Pertalite'
-        });
-        mockTxs.push({
-            id: Date.now() - 32000,
-            type: 'pengeluaran',
-            category: 'konsumsi',
-            amount: 20000,
-            date: getOffsetDate(3),
-            note: 'Makan soto banjar'
-        });
-
-        // 4 HARI LALU
-        mockTxs.push({
-            id: Date.now() - 40000,
-            type: 'pemasukan',
-            category: 'narik',
-            amount: 190000,
-            date: getOffsetDate(4),
-            note: 'Narik lancar'
-        });
-        mockTxs.push({
-            id: Date.now() - 41000,
-            type: 'pengeluaran',
-            category: 'bensin',
-            amount: 30000,
-            date: getOffsetDate(4),
-            note: 'Bensin harian'
-        });
-
-        // 5 HARI LALU
-        mockTxs.push({
-            id: Date.now() - 50000,
-            type: 'pemasukan',
-            category: 'narik',
-            amount: 160000,
-            date: getOffsetDate(5),
-            note: 'Hari biasa'
-        });
-        mockTxs.push({
-            id: Date.now() - 51000,
-            type: 'pengeluaran',
-            category: 'bensin',
-            amount: 20000,
-            date: getOffsetDate(5),
-            note: 'Bensin'
-        });
-        mockTxs.push({
-            id: Date.now() - 52000,
-            type: 'pengeluaran',
-            category: 'lainnya',
-            amount: 5000,
-            date: getOffsetDate(5),
-            note: 'Bayar parkir'
-        });
-
-        return mockTxs;
-    }
-
     // ──────────────────────────────────────────────
     //  BACKUP & EXPORT
     // ──────────────────────────────────────────────
 
-    /**
-     * Mengekspor seluruh data (transaksi + pengaturan) ke JSON string.
-     * Digunakan untuk fitur backup/download.
-     * @returns {string} JSON string siap diunduh
-     */
     exportToJSON() {
-        const dataStr = JSON.stringify({
-            transactions: this.transactions,
+        return JSON.stringify({
+            transactions: this._allTxs,
             settings: this.settings,
-            exportVersion: '2.0-simple',
+            exportVersion: '3.0-firestore',
             exportedAt: new Date().toISOString()
         }, null, 2);
-        return dataStr;
     }
 
-    /**
-     * Mengimpor data dari JSON string backup. Memvalidasi struktur
-     * sebelum menimpa data yang ada.
-     * @param {string} jsonString - Konten file backup JSON
-     * @returns {boolean} true jika berhasil, false jika format tidak valid
-     */
-    importFromJSON(jsonString) {
+    async importFromJSON(jsonString) {
         try {
             const parsed = JSON.parse(jsonString);
-            if (parsed && Array.isArray(parsed.transactions)) {
-                this.transactions = parsed.transactions;
-                if (parsed.settings) {
-                    this.settings = { ...DEFAULT_SETTINGS, ...parsed.settings };
-                }
-                this.saveToStorage(STORAGE_KEYS.TRANSACTIONS, this.transactions);
-                this.saveToStorage(STORAGE_KEYS.SETTINGS, this.settings);
-                return true;
+            if (!parsed || !Array.isArray(parsed.transactions)) return false;
+
+            // Hapus data lama
+            const batch = this.db.batch();
+            const snapshot = await this.db.collection('transactions').get();
+            snapshot.docs.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+
+            // Import data baru
+            const importBatch = this.db.batch();
+            parsed.transactions.forEach(tx => {
+                const ref = this.db.collection('transactions').doc();
+                importBatch.set(ref, {
+                    type: tx.type,
+                    category: tx.category,
+                    amount: Number(tx.amount),
+                    date: tx.date,
+                    note: tx.note || '',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            });
+            await importBatch.commit();
+
+            if (parsed.settings) {
+                this.settings = { ...DEFAULT_SETTINGS, ...parsed.settings };
+                await this.db.doc('settings/app').set(this.settings);
             }
-            return false;
+
+            return true;
         } catch (e) {
-            console.error('Error parse JSON backup:', e);
+            console.error('Import error:', e);
             return false;
         }
     }
@@ -457,19 +356,19 @@ class KeuanganStore {
     exportToCSV() {
         const headers = ['ID', 'Tanggal', 'Tipe', 'Kategori', 'Jumlah', 'Catatan'];
         const csvRows = [headers.join(',')];
-        const sortedTxs = [...this.transactions].sort((a, b) => b.id - a.id);
+        const sorted = [...this._allTxs].sort((a, b) => (b.date + b.id) > (a.date + a.id) ? 1 : -1);
 
-        for (const tx of sortedTxs) {
+        sorted.forEach(tx => {
             const row = [
                 tx.id,
                 tx.date,
                 tx.type === 'pemasukan' ? 'Pemasukan' : 'Pengeluaran',
-                CATEGORIES[tx.type][tx.category]?.label || tx.category,
+                CATEGORIES[tx.type]?.[tx.category]?.label || tx.category,
                 tx.amount,
                 `"${(tx.note || '').replace(/"/g, '""')}"`
             ];
             csvRows.push(row.join(','));
-        }
+        });
 
         return csvRows.join('\n');
     }

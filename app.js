@@ -93,6 +93,10 @@ function initApp() {
 
     updateCategoryDropdown();
     updateUI();
+
+    // Real-time update dari Firestore
+    window.keuanganStore.onUpdate(updateUI);
+
     initViewToggle();
     setupEventListeners();
 }
@@ -241,11 +245,10 @@ function renderTransactionList() {
         `;
 
         const delBtn = item.querySelector('.delete-btn');
-        delBtn.addEventListener('click', (e) => {
+        delBtn.addEventListener('click', async (e) => {
             e.stopPropagation();
             if (confirm('Apakah Anda yakin ingin menghapus transaksi ini?')) {
-                store.deleteTransaction(tx.id);
-                updateUI();
+                await store.deleteTransaction(tx.id);
             }
         });
 
@@ -283,7 +286,7 @@ function setupEventListeners() {
     }
 
     if (DOM.txForm) {
-        DOM.txForm.addEventListener('submit', (e) => {
+        DOM.txForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
             const amount = parseFloat(DOM.txAmount.value);
@@ -297,7 +300,7 @@ function setupEventListeners() {
             const date = DOM.txDate.value;
             const note = DOM.txNote.value.trim();
 
-            window.keuanganStore.addTransaction({
+            await window.keuanganStore.addTransaction({
                 type,
                 category,
                 amount,
@@ -307,19 +310,18 @@ function setupEventListeners() {
 
             DOM.txAmount.value = '';
             DOM.txNote.value = '';
-            updateUI();
         });
     }
 
     // Quick Log Action
     document.querySelectorAll('.btn-quick-log').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        btn.addEventListener('click', async (e) => {
             const action = e.currentTarget.getAttribute('data-action');
             const today = new Date().toISOString().split('T')[0];
             const store = window.keuanganStore;
 
             if (action === 'bensin_30') {
-                store.addTransaction({
+                await store.addTransaction({
                     type: 'pengeluaran',
                     category: 'bensin',
                     amount: 30000,
@@ -327,7 +329,7 @@ function setupEventListeners() {
                     note: 'Bensin Pertalite (Modal Awal)'
                 });
             } else if (action === 'bensin_20') {
-                store.addTransaction({
+                await store.addTransaction({
                     type: 'pengeluaran',
                     category: 'bensin',
                     amount: 20000,
@@ -335,7 +337,7 @@ function setupEventListeners() {
                     note: 'Bensin harian (Modal Awal)'
                 });
             } else if (action === 'kredit_30') {
-                store.addTransaction({
+                await store.addTransaction({
                     type: 'pengeluaran',
                     category: 'kredit',
                     amount: 30000,
@@ -343,7 +345,7 @@ function setupEventListeners() {
                     note: 'Top-up Dompet Kredit (Modal Awal)'
                 });
             } else if (action === 'kredit_50') {
-                store.addTransaction({
+                await store.addTransaction({
                     type: 'pengeluaran',
                     category: 'kredit',
                     amount: 50000,
@@ -351,7 +353,7 @@ function setupEventListeners() {
                     note: 'Top-up Dompet Kredit (Modal Awal)'
                 });
             } else if (action === 'konsumsi_15') {
-                store.addTransaction({
+                await store.addTransaction({
                     type: 'pengeluaran',
                     category: 'konsumsi',
                     amount: 15000,
@@ -359,7 +361,7 @@ function setupEventListeners() {
                     note: 'Makan/Minum di jalan'
                 });
             } else if (action === 'konsumsi_25') {
-                store.addTransaction({
+                await store.addTransaction({
                     type: 'pengeluaran',
                     category: 'konsumsi',
                     amount: 25000,
@@ -367,7 +369,7 @@ function setupEventListeners() {
                     note: 'Makan siang & rokok'
                 });
             } else if (action === 'servis_75') {
-                store.addTransaction({
+                await store.addTransaction({
                     type: 'pengeluaran',
                     category: 'servis',
                     amount: 75000,
@@ -375,7 +377,7 @@ function setupEventListeners() {
                     note: 'Servis rutin / ganti oli'
                 });
             } else if (action === 'narik_200') {
-                store.addTransaction({
+                await store.addTransaction({
                     type: 'pemasukan',
                     category: 'narik',
                     amount: 200000,
@@ -383,7 +385,6 @@ function setupEventListeners() {
                     note: 'Pendapatan Bersih Grab Hari Ini'
                 });
             }
-            updateUI();
         });
     });
 
@@ -420,18 +421,17 @@ function setupEventListeners() {
     });
 
     if (DOM.settingsForm) {
-        DOM.settingsForm.addEventListener('submit', (e) => {
+        DOM.settingsForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const driverName = DOM.cfgDriverName.value.trim() || 'Driver Grabike Batam';
             const dailyTarget = parseFloat(DOM.cfgDailyTarget.value) || 150000;
 
-            window.keuanganStore.updateSettings({
+            await window.keuanganStore.updateSettings({
                 driverName,
                 dailyTarget
             });
 
             DOM.settingsModal.classList.remove('active');
-            updateUI();
         });
     }
 
@@ -462,18 +462,17 @@ function setupEventListeners() {
             DOM.fileImportJSON.click();
         });
         
-        DOM.fileImportJSON.addEventListener('change', (e) => {
+        DOM.fileImportJSON.addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
 
             const reader = new FileReader();
-            reader.onload = (evt) => {
+            reader.onload = async (evt) => {
                 const content = evt.target.result;
-                const success = window.keuanganStore.importFromJSON(content);
+                const success = await window.keuanganStore.importFromJSON(content);
                 if (success) {
                     alert('Data keuangan berhasil dipulihkan!');
                     DOM.backupModal.classList.remove('active');
-                    updateUI();
                 } else {
                     alert('Gagal mengimpor file! Pastikan file backup valid.');
                 }
@@ -483,12 +482,10 @@ function setupEventListeners() {
     }
 
     if (DOM.btnClearAll) {
-        DOM.btnClearAll.addEventListener('click', () => {
+        DOM.btnClearAll.addEventListener('click', async () => {
             if (confirm('PERHATIAN! Hapus semua data keuangan secara permanen?') && confirm('Apakah Anda yakin?')) {
-                window.keuanganStore.clearAllData();
+                await window.keuanganStore.clearAllData();
                 DOM.backupModal.classList.remove('active');
-                updateUI();
-                alert('Semua data keuangan telah dibersihkan.');
             }
         });
     }

@@ -1,0 +1,24 @@
+{
+  "name": "keuangan-grab",
+  "version": "1.0.0",
+  "description": "Aplikasi web progresif pencatat keuangan harian untuk driver **Grabike** (ojek online) di Batam. Dirancang agar simpel, cepat, dan bisa dipakai offline di browser HP.",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ripaldomarbun/keuangan-grabike.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ripaldomarbun/keuangan-grabike/issues"
+  },
+  "homepage": "https://github.com/ripaldomarbun/keuangan-grabike#readme",
+  "devDependencies": {
+    "firebase-tools": "^15.18.0"
+  }
+}

@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grabike Batam | Catatan Keuangan Driver Simpel</title>
+    <meta name="description" content="Aplikasi web simpel pencatat keuangan driver Grabike di Batam. Catat pendapatan bersih narik harian, modal bensin, top-up kredit, dan uang makan rokok secara praktis.">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="ambient-glow-1"></div>
+    <div class="ambient-glow-2"></div>
+
+    <div class="app-container">
+        <!-- HEADER -->
+        <header>
+            <div class="brand">
+                <div class="brand-logo-container">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-motorcycle"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="18" r="3"/><path d="M9 18h6"/><path d="M12 10h3l1-4h3"/><path d="m14 10 2-4h-4"/><path d="M8.5 12.5 11 18"/><path d="m16.5 12.5-3 5.5"/><path d="M7 10h1l1.5 2.5"/></svg>
+                </div>
+                <div class="brand-text">
+                    <h1>Grabike <span>Batam</span></h1>
+                    <p id="driverDisplayName">Driver Grabike Batam</p>
+                </div>
+            </div>
+            
+            <div class="header-actions">
+                <button class="btn-action btn-secondary view-toggle-btn" id="viewToggleBtn" title="Pratinjau Tampilan Mobile">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-smartphone"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" x2="12.01" y1="18" y2="18"/></svg>
+                    <span>Mobile</span>
+                </button>
+                <button class="btn-action btn-secondary open-backup-btn" title="Backup & Restore Data">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-database"><path d="M3 5c0 2.1 4 4 9 4s9-1.9 9-4s-4-4-9-4s-9 1.9-9 4Z"/><path d="M3 5v6c0 2.1 4 4 9 4s9-1.9 9-4V5"/><path d="M3 11v6c0 2.1 4 4 9 4s9-1.9 9-4v-6"/></svg>
+                    <span>Backup Data</span>
+                </button>
+                <button class="btn-action open-settings-btn" title="Pengaturan Target">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <span>Target Harian</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- DASHBOARD GRID -->
+        <main class="dashboard-grid">
+            
+            <!-- LEFT COLUMN -->
+            <div class="dashboard-main">
+                
+                <!-- CARD 1: RINGKASAN SALDO -->
+                <section class="premium-card">
+                    <div class="balance-card-grid">
+                        <div class="net-balance-section">
+                            <span class="balance-label">Uang Bersih Dibawa Pulang</span>
+                            <div id="netProfit" class="balance-value positive">Rp 0</div>
+                        </div>
+                        <div class="wallet-section">
+                            <div class="wallet-row" title="Modal Bensin sebelum on-bit">
+                                <span class="wallet-name">⛽ Modal Bensin</span>
+                                <span id="capitalBensin" class="wallet-value">Rp 0</span>
+                            </div>
+                            <div class="wallet-row" title="Modal Saldo Dompet Kredit Grab">
+                                <span class="wallet-name">💳 Top-up Kredit</span>
+                                <span id="capitalKredit" class="wallet-value">Rp 0</span>
+                            </div>
+                            <div class="wallet-row" title="Makan, minum, rokok, servis, dll">
+                                <span class="wallet-name">🍜 Biaya Operasional</span>
+                                <span id="operationalCost" class="wallet-value">Rp 0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="height: 1px; background: rgba(255,255,255,0.06); margin: 20px 0;"></div>
+
+                    <div class="quick-stats-row">
+                        <div class="quick-stat-box">
+                            <div class="stat-icon pemasukan">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trending-up"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                            </div>
+                            <div class="stat-info">
+                                <span class="stat-label">Pemasukan Bersih Grab</span>
+                                <span id="totalIncome" class="stat-val" style="color: var(--income-color);">Rp 0</span>
+                            </div>
+                        </div>
+                        <div class="quick-stat-box">
+                            <div class="stat-icon pengeluaran">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trending-down"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></svg>
+                            </div>
+                            <div class="stat-info">
+                                <span class="stat-label">Total Modal & Pengeluaran</span>
+                                <span id="totalExpense" class="stat-val" style="color: var(--expense-color);">Rp 0</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- CARD 2: TARGET -->
+                <section class="premium-card target-card">
+                    <div class="target-header">
+                        <span class="card-title">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-target"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+                            Target Pendapatan Hari Ini
+                        </span>
+                        <div class="target-numbers">
+                            <span id="todayIncome" class="earned">Rp 0</span>
+                            <span class="goal"> / target <span id="dailyTargetText">Rp 150.000</span></span>
+                        </div>
+                    </div>
+                    <div class="progress-track">
+                        <div id="targetBar" class="progress-fill"></div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: -4px;">
+                        <span id="targetStatusMsg" class="target-message" style="flex: 1; text-align: left;">Menghitung target...</span>
+                        <span id="targetPercent" style="font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.1rem; color: var(--grab-green); margin-left: 12px;">0%</span>
+                    </div>
+                </section>
+
+                <!-- CARD 3: ANALISIS -->
+                <section class="premium-card">
+                    <span class="card-title" style="margin-bottom: 20px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-line-chart"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+                        Grafik Kas & Pengeluaran
+                    </span>
+                    <div class="charts-grid">
+                        <div>
+                            <h4 style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px; font-weight: 600; text-transform: uppercase;">Tren Arus Kas (7 Hari Terakhir)</h4>
+                            <div class="chart-container-wrapper">
+                                <canvas id="trendChart"></canvas>
+                            </div>
+                        </div>
+                        <div>
+                            <h4 style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px; font-weight: 600; text-transform: uppercase;">Alokasi Modal & Biaya</h4>
+                            <div class="chart-container-wrapper">
+                                <canvas id="expenseChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- CARD 4: RIWAYAT -->
+                <section class="premium-card">
+                    <div class="card-title-wrapper" style="margin-bottom: 16px;">
+                        <span class="card-title">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-history"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>
+                            Riwayat Catatan
+                        </span>
+                    </div>
+
+                    <div class="filter-search-row">
+                        <div class="filter-btn-group">
+                            <button class="filter-btn active" data-filter="all">Semua</button>
+                            <button class="filter-btn" data-filter="today">Hari Ini</button>
+                            <button class="filter-btn" data-filter="week">Minggu Ini</button>
+                            <button class="filter-btn" data-filter="month">Bulan Ini</button>
+                        </div>
+                        <div class="search-input-wrapper">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-search"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                            <input type="text" id="searchTx" class="input-control" placeholder="Cari catatan...">
+                        </div>
+                    </div>
+
+                    <div id="historyList" class="history-list">
+                        <!-- Transaksi dari app.js -->
+                    </div>
+                </section>
+
+            </div>
+
+            <!-- RIGHT COLUMN -->
+            <div class="dashboard-sidebar">
+                
+                <!-- CARD 5: FORM TAMBAH -->
+                <section class="premium-card">
+                    <span class="card-title" style="margin-bottom: 20px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus-circle"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>
+                        Catat Keuangan
+                    </span>
+
+                    <form id="txForm">
+                        <div class="form-group-row">
+                            <div class="form-group">
+                                <label for="txType" class="form-label">Tipe Transaksi</label>
+                                <select id="txType" class="input-control">
+                                    <option value="pemasukan" selected>Pemasukan (Bersih Grab)</option>
+                                    <option value="pengeluaran">Pengeluaran / Modal</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="txDate" class="form-label">Tanggal</label>
+                                <input type="date" id="txDate" class="input-control" required>
+                            </div>
+                        </div>
+
+                        <div class="form-group-row">
+                            <div class="form-group" style="grid-column: span 2;">
+                                <label for="txCategory" class="form-label">Kategori</label>
+                                <select id="txCategory" class="input-control">
+                                    <!-- Diisi dinamis -->
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="txAmount" class="form-label">Nominal (Rp)</label>
+                            <input type="number" id="txAmount" class="input-control" placeholder="Contoh: 200000" min="1" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="txNote" class="form-label">Catatan</label>
+                            <input type="text" id="txNote" class="input-control" placeholder="Contoh: Nagoya ke Batam Center / rokok kopi">
+                        </div>
+
+                        <button type="submit" class="btn-action" style="width: 100%; justify-content: center; margin-top: 10px; padding: 14px;">
+                            <span id="submitBtnText">Catat Pendapatan Bersih</span>
+                        </button>
+                    </form>
+                </section>
+
+                <!-- CARD 6: QUICK LOG (Satu Klik) -->
+                <section class="premium-card">
+                    <span class="card-title" style="margin-bottom: 8px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-zap"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        Catat Cepat (Satu Klik)
+                    </span>
+                    <p style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 20px;">Langsung catat pengeluaran rutin atau argo bersih hari ini.</p>
+
+                    <div class="quick-log-grid">
+                        <button class="btn-quick-log pemasukan-quick" data-action="narik_200">
+                            <span class="quick-action-title">🏍️ Narik Bersih</span>
+                            <span class="quick-action-amount" style="color: var(--income-color);">Rp 200.000</span>
+                        </button>
+                        <button class="btn-quick-log" data-action="bensin_30">
+                            <span class="quick-action-title">⛽ Bensin Modal</span>
+                            <span class="quick-action-amount">Rp 30.000</span>
+                        </button>
+                        <button class="btn-quick-log" data-action="bensin_20">
+                            <span class="quick-action-title">⛽ Bensin Tambahan</span>
+                            <span class="quick-action-amount">Rp 20.000</span>
+                        </button>
+                        <button class="btn-quick-log" data-action="kredit_30">
+                            <span class="quick-action-title">💳 Top Up Kredit</span>
+                            <span class="quick-action-amount">Rp 30.000</span>
+                        </button>
+                        <button class="btn-quick-log" data-action="kredit_50">
+                            <span class="quick-action-title">💳 Top Up Kredit</span>
+                            <span class="quick-action-amount">Rp 50.000</span>
+                        </button>
+                        <button class="btn-quick-log" data-action="konsumsi_15">
+                            <span class="quick-action-title">☕ Makan & Minum</span>
+                            <span class="quick-action-amount">Rp 15.000</span>
+                        </button>
+                        <button class="btn-quick-log" data-action="konsumsi_25">
+                            <span class="quick-action-title">🚬 Makan + Rokok</span>
+                            <span class="quick-action-amount">Rp 25.000</span>
+                        </button>
+                        <button class="btn-quick-log" data-action="servis_75">
+                            <span class="quick-action-title">🔧 Servis / Oli</span>
+                            <span class="quick-action-amount">Rp 75.000</span>
+                        </button>
+                    </div>
+                </section>
+
+            </div>
+
+        </main>
+    </div>
+
+    <!-- MODAL 1: SETTINGS -->
+    <div id="settingsModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Target Harian</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <form id="settingsForm">
+                <div class="form-group">
+                    <label for="cfgDriverName" class="form-label">Nama Driver</label>
+                    <input type="text" id="cfgDriverName" class="input-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="cfgDailyTarget" class="form-label">Target Pendapatan Bersih Harian (Rp)</label>
+                    <input type="number" id="cfgDailyTarget" class="input-control" min="0" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-action btn-secondary close-modal">Batal</button>
+                    <button type="submit" class="btn-action">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 2: BACKUP -->
+    <div id="backupModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Backup & Sinkronisasi</h3>
+                <button class="close-modal">&times;</button>
+            </div>
+            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.5;">
+                Semua data Anda tersimpan di browser HP. Lakukan backup agar data tidak hilang ketika menghapus riwayat browser.
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <button id="btnExportJSON" class="btn-action" style="justify-content: center;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-download"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                    Unduh Backup Data (.json)
+                </button>
+                <button id="btnExportCSV" class="btn-action btn-secondary" style="justify-content: center;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-spreadsheet"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h10"/><path d="M10 9H8"/></svg>
+                    Ekspor Laporan ke Excel (.csv)
+                </button>
+                <div style="height: 1px; background: rgba(255,255,255,0.06); margin: 8px 0;"></div>
+                <input type="file" id="fileImportJSON" accept=".json" style="display: none;">
+                <button id="btnImportJSONTrigger" class="btn-action btn-secondary" style="justify-content: center;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-upload"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+                    Pulihkan dari File Backup (.json)
+                </button>
+            </div>
+            <div class="danger-zone">
+                <h4>Zona Bahaya</h4>
+                <button id="btnClearAll" class="btn-action btn-danger" style="width: 100%; justify-content: center; padding: 12px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash-2"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                    Hapus Semua Data Aplikasi
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Imports -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="store.js"></script>
+    <script src="charts.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

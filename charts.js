@@ -1,14 +1,33 @@
 /**
- * charts.js - Handler visualisasi data keuangan (Simplified)
- * Menggunakan Chart.js untuk menggambar arus kas dan alokasi modal/biaya
+ * @fileoverview Visualisasi data keuangan menggunakan Chart.js.
+ * Menyediakan dua grafik: line chart tren arus kas 7 hari dan
+ * donut chart alokasi pengeluaran per kategori.
+ *
+ * Dependencies: Chart.js (CDN), store.js (window.keuanganStore)
+ *
+ * @author Driver Grabike Batam
+ * @version 2.0.0-simple
  */
 
+/**
+ * Pengelola grafik Chart.js. Mengelola siklus hidup dua canvas:
+ * - #trendChart: Line chart pendapatan vs pengeluaran 7 hari
+ * - #expenseChart: Doughnut chart proporsi pengeluaran per kategori
+ *
+ * Setiap kali updateCharts() dipanggil, chart lama di-destroy
+ * dan dibuat ulang dengan data terkini dari store.
+ */
 class KeuanganChartManager {
     constructor() {
+        /** @type {Chart|null} */
         this.trendChart = null;
+        /** @type {Chart|null} */
         this.expenseChart = null;
     }
 
+    /**
+     * Inisialisasi awal kedua grafik. Panggil sekali setelah DOM siap.
+     */
     initCharts() {
         this.renderTrendChart();
         this.renderExpenseChart();

@@ -1,6 +1,38 @@
 /**
- * store.js - State Management & LocalStorage Handler (Simplified)
- * Dirancang khusus untuk Catatan Keuangan Grabike Batam yang Simpel
+ * @typedef {Object} Transaction
+ * @property {number} id - Unique identifier (timestamp-based)
+ * @property {'pemasukan'|'pengeluaran'} type - Transaction type
+ * @property {string} category - Category key (narik, bensin, kredit, etc.)
+ * @property {number} amount - Transaction amount in IDR
+ * @property {string} date - ISO date string (YYYY-MM-DD)
+ * @property {string} note - Optional note
+ */
+
+/**
+ * @typedef {Object} DailySummary
+ * @property {number} totalIncome - Total income for filtered period
+ * @property {number} totalExpense - Total expense for filtered period
+ * @property {number} netProfit - Income minus expense (take home pay)
+ * @property {number} capitalBensin - Total bensin expense
+ * @property {number} capitalKredit - Total kredit top-up
+ * @property {number} operationalCost - Other operational costs (food, service, etc.)
+ * @property {number} todayIncome - Today's total income
+ * @property {number} targetProgress - Progress toward target (0-100, capped)
+ * @property {number} rawTargetProgress - Un-capped progress percentage
+ * @property {number} dailyTarget - Configured daily target in IDR
+ */
+
+/**
+ * @typedef {Object} AppSettings
+ * @property {number} dailyTarget - Target pendapatan bersih harian (default: 150000)
+ * @property {string} driverName - Nama pengemudi untuk tampilan header
+ */
+
+/**
+ * @typedef {Object} CategoryConfig
+ * @property {string} label - Nama kategori yang ditampilkan di UI
+ * @property {string} icon - Nama ikon Lucide untuk rendering SVG
+ * @property {string} color - Warna hex untuk aksen kategori
  */
 
 const STORAGE_KEYS = {
@@ -27,6 +59,11 @@ const CATEGORIES = {
     }
 };
 
+/**
+ * Manajemen state pusat dengan persistensi localStorage.
+ * Menangani seluruh siklus data: create, read, delete, kalkulasi ringkasan,
+ * export/import, dan inisialisasi data mock untuk pengguna baru.
+ */
 class KeuanganStore {
     constructor() {
         const storedTxs = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);
@@ -59,7 +96,15 @@ class KeuanganStore {
         }
     }
 
-    // --- TRANSACTIONS ---
+    // ──────────────────────────────────────────────
+    //  TRANSACTIONS
+    // ──────────────────────────────────────────────
+
+    /**
+     * Mengembalikan salinan seluruh transaksi, terurut berdasarkan
+     * tanggal (terbaru duluan) dan ID (terbaru duluan).
+     * @returns {Transaction[]} Salinan array transaksi
+     */
     getTransactions() {
         return [...this.transactions].sort((a, b) => {
             const dateDiff = new Date(b.date) - new Date(a.date);
@@ -68,6 +113,11 @@ class KeuanganStore {
         });
     }
 
+    /**
+     * Menambahkan transaksi baru ke dalam store dan menyimpannya.
+     * @param {Omit<Transaction, 'id'>} tx - Data transaksi tanpa ID
+     * @returns {Transaction} Transaksi yang baru dibuat (dengan ID)
+     */
     addTransaction(tx) {
         const newTx = {
             id: tx.id || Date.now(),
@@ -83,11 +133,19 @@ class KeuanganStore {
         return newTx;
     }
 
+    /**
+     * Menghapus satu transaksi berdasarkan ID.
+     * @param {number} id - ID transaksi yang akan dihapus
+     */
     deleteTransaction(id) {
         this.transactions = this.transactions.filter(tx => tx.id !== Number(id));
         this.saveToStorage(STORAGE_KEYS.TRANSACTIONS, this.transactions);
     }
 
+    /**
+     * Menghapus seluruh data transaksi dan mengatur ulang pengaturan
+     * ke nilai default. Operasi ireversibel — konfirmasi pengguna wajib.
+     */
     clearAllData() {
         this.transactions = [];
         this.settings = { ...DEFAULT_SETTINGS };
@@ -95,17 +153,38 @@ class KeuanganStore {
         this.saveToStorage(STORAGE_KEYS.SETTINGS, this.settings);
     }
 
-    // --- SETTINGS ---
+    // ──────────────────────────────────────────────
+    //  SETTINGS
+    // ──────────────────────────────────────────────
+
+    /**
+     * Mengembalikan objek pengaturan saat ini (driver name, daily target).
+     * @returns {AppSettings}
+     */
     getSettings() {
         return this.settings;
     }
 
+    /**
+     * Memperbarui satu atau lebih properti pengaturan.
+     * Menggabungkan (merge) dengan pengaturan yang sudah ada.
+     * @param {Partial<AppSettings>} newSettings - Properti yang akan diperbarui
+     */
     updateSettings(newSettings) {
         this.settings = { ...this.settings, ...newSettings };
         this.saveToStorage(STORAGE_KEYS.SETTINGS, this.settings);
     }
 
-    // --- CALCULATIONS ---
+    // ──────────────────────────────────────────────
+    //  CALCULATIONS
+    // ──────────────────────────────────────────────
+
+    /**
+     * Menghitung ringkasan keuangan berdasarkan filter periode.
+     *
+     * @param {'all'|'today'|'week'|'month'} dateFilter - Periode filter
+     * @returns {DailySummary} Ringkasan pendapatan, pengeluaran, modal, progress target
+     */
     getSummary(dateFilter = 'all') {
         const todayStr = new Date().toISOString().split('T')[0];
         const now = new Date();
@@ -331,7 +410,15 @@ class KeuanganStore {
         return mockTxs;
     }
 
-    // --- BACKUP & EXPORT ---
+    // ──────────────────────────────────────────────
+    //  BACKUP & EXPORT
+    // ──────────────────────────────────────────────
+
+    /**
+     * Mengekspor seluruh data (transaksi + pengaturan) ke JSON string.
+     * Digunakan untuk fitur backup/download.
+     * @returns {string} JSON string siap diunduh
+     */
     exportToJSON() {
         const dataStr = JSON.stringify({
             transactions: this.transactions,
@@ -342,6 +429,12 @@ class KeuanganStore {
         return dataStr;
     }
 
+    /**
+     * Mengimpor data dari JSON string backup. Memvalidasi struktur
+     * sebelum menimpa data yang ada.
+     * @param {string} jsonString - Konten file backup JSON
+     * @returns {boolean} true jika berhasil, false jika format tidak valid
+     */
     importFromJSON(jsonString) {
         try {
             const parsed = JSON.parse(jsonString);

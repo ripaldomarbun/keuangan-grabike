@@ -1,6 +1,12 @@
 /**
- * app.js - Controller untuk interaksi UI & DOM (Simplified)
- * Dirancang khusus untuk Catatan Keuangan Grabike Batam yang Simpel
+ * @fileoverview Controller UI — menghubungkan interaksi pengguna dengan
+ * model data (store.js). Menangani event handling, rendering DOM,
+ * form validation, quick-log, filter, modal, dan toggle tampilan.
+ *
+ * Arsitektur: Event → Store → Render
+ *
+ * @author Driver Grabike Batam
+ * @version 2.0.0-simple
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -9,7 +15,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 let currentFilter = 'all';
 
-// Referensi DOM Elements
+/**
+ * Cache referensi elemen DOM yang sering diakses.
+ * Diinisialisasi sekali saat DOMContentLoaded untuk performa.
+ * @type {Object<string, HTMLElement|null>}
+ */
 const DOM = {
     // Balances
     netProfit: document.getElementById('netProfit'),
@@ -60,6 +70,12 @@ const DOM = {
     viewToggleBtn: document.getElementById('viewToggleBtn')
 };
 
+/**
+ * Memformat angka ke mata uang Rupiah dengan locale Indonesia.
+ * Menangani nilai negatif dengan awalan "-".
+ * @param {number} amount - Nominal dalam IDR
+ * @returns {string} String terformat, contoh: "Rp 150.000"
+ */
 function formatRupiah(amount) {
     const isNegative = amount < 0;
     const absVal = Math.abs(amount);
@@ -67,6 +83,10 @@ function formatRupiah(amount) {
     return isNegative ? `-${formatted}` : formatted;
 }
 
+/**
+ * Inisialisasi utama aplikasi. Dipanggil setelah DOM siap.
+ * Urutan: set tanggal default → isi dropdown kategori → render UI → init toggle → pasang listener
+ */
 function initApp() {
     const today = new Date().toISOString().split('T')[0];
     if (DOM.txDate) DOM.txDate.value = today;
@@ -77,6 +97,10 @@ function initApp() {
     setupEventListeners();
 }
 
+/**
+ * Memperbarui opsi dropdown kategori berdasarkan tipe transaksi
+ * yang dipilih (pemasukan → kategori pemasukan, pengeluaran → kategori pengeluaran).
+ */
 function updateCategoryDropdown() {
     if (!DOM.txCategory || !DOM.txType) return;
     
@@ -93,6 +117,10 @@ function updateCategoryDropdown() {
     });
 }
 
+/**
+ * Memperbarui seluruh antarmuka: ringkasan saldo, target harian,
+ * daftar riwayat, dan grafik. Dipanggil setiap kali data berubah.
+ */
 function updateUI() {
     const store = window.keuanganStore;
     const summary = store.getSummary(currentFilter);
